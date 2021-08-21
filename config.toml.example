@@ -1,0 +1,8 @@
+[smtp]
+host = "mydomain.com"
+username = "username"
+password = "password"
+port = 587
+
+[database]
+url = "mysql://user:password@localhost:3306/ddnetauth"
