@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use axum::response::Json;
 use axum::AddExtensionLayer;
 use axum::{http::StatusCode, prelude::*, response::IntoResponse};
 use base64::STANDARD;
@@ -7,6 +8,7 @@ use base64_serde::base64_serde_type;
 use ed25519_dalek::{PublicKey, Signature, Verifier};
 use errors::Errors;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::MySqlPool;
 use std::convert::TryFrom;
 use std::net::SocketAddr;
@@ -48,8 +50,9 @@ async fn main() {
     let mailer: Arc<Mailer> = Arc::new(config.smtp.try_into().expect("error loading mailer"));
 
     let app = route("/version", get(version))
-        .route("/account_mapping", post(account_id_mapping))
-        .route("/register", post(register_account))
+        .route("/account/mapping", post(account_id_mapping))
+        .route("/account/verify", post(verify_user))
+        .route("/account/register", post(register_account))
         .layer(AddExtensionLayer::new(mailer))
         .layer(AddExtensionLayer::new(pool));
 
@@ -108,5 +111,37 @@ async fn register_account(
         Ok(id.to_string())
     } else {
         Err(Errors::InvalidSignature)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct VerifyUserPayload {
+    #[serde(with = "Base64Serde")]
+    public_key: Vec<u8>,
+    message: String,
+    #[serde(with = "Base64Serde")]
+    message_signature: Vec<u8>,
+}
+
+async fn verify_user(
+    pool: extract::Extension<MySqlPool>,
+    extract::Json(payload): extract::Json<VerifyUserPayload>,
+) -> Result<impl IntoResponse, Errors> {
+    if let Some(account_id) = db::get_account_id(&pool, &payload.public_key).await? {
+        let public_key = PublicKey::from_bytes(&payload.public_key).unwrap();
+        let signature = Signature::try_from(&payload.message_signature[..]).unwrap();
+        let verified = public_key
+            .verify(payload.message.as_bytes(), &signature)
+            .is_ok();
+
+        if verified {
+            Ok(Json(json!({
+                "account_id": account_id,
+            })))
+        } else {
+            Err(Errors::InvalidSignature)
+        }
+    } else {
+        Err(Errors::NotFound)
     }
 }
