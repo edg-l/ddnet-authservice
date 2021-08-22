@@ -12,7 +12,11 @@ use serde_json::json;
 use sqlx::MySqlPool;
 use std::convert::TryFrom;
 use std::net::SocketAddr;
+use std::time::Duration;
 use std::{convert::TryInto, sync::Arc};
+use tower::ServiceBuilder;
+use tower_http::{compression::CompressionLayer, trace::TraceLayer};
+use tracing::debug;
 use tracing_subscriber::EnvFilter;
 
 use crate::{email::Mailer, settings::Config};
@@ -49,10 +53,21 @@ async fn main() {
 
     let mailer: Arc<Mailer> = Arc::new(config.smtp.try_into().expect("error loading mailer"));
 
+    let middleware_stack = ServiceBuilder::new()
+        // timeout all requests after 5 seconds
+        .timeout(Duration::from_secs(5))
+        // add high level tracing of requests and responses
+        .layer(TraceLayer::new_for_http())
+        // compression responses
+        .layer(CompressionLayer::new())
+        // convert the `ServiceBuilder` into a `tower::Layer`
+        .into_inner();
+
     let app = route("/version", get(version))
         .route("/account/mapping", post(account_id_mapping))
         .route("/account/verify", post(verify_user))
         .route("/account/register", post(register_account))
+        .layer(middleware_stack)
         .layer(AddExtensionLayer::new(mailer))
         .layer(AddExtensionLayer::new(pool));
 
@@ -98,11 +113,21 @@ async fn register_account(
     pool: extract::Extension<MySqlPool>,
     extract::Json(payload): extract::Json<RegisterPayload>,
 ) -> Result<impl IntoResponse, Errors> {
+    debug!("Incoming register request");
+    
+    dbg!(&payload);
+
     let public_key = PublicKey::from_bytes(&payload.public_key).unwrap();
     let signature = Signature::try_from(&payload.email_signature[..]).unwrap();
+
+    dbg!(&public_key);
+    dbg!(&signature);
+
     let verified = public_key
         .verify(payload.email.as_bytes(), &signature)
         .is_ok();
+
+    dbg!(&verified);
 
     if verified {
         let id = uuid::Uuid::new_v4();

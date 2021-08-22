@@ -18,6 +18,8 @@ serde_json = "1.0.66"
 sqlx = { version = "0.5.7", features = ["runtime-tokio-rustls", "mysql", "migrate"] }
 thiserror = "1.0.26"
 tokio = { version = "1.10.0", features = ["full"] }
+tower = { version = "0.4.8", features = ["full"] }
+tower-http = { version = "0.1.1", features = ["full"] }
 tracing = "0.1.26"
 tracing-subscriber = "0.2.20"
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
