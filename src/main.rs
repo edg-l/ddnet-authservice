@@ -1,19 +1,24 @@
 #![forbid(unsafe_code)]
 
-use axum::response::Json;
-use axum::AddExtensionLayer;
-use axum::{http::StatusCode, prelude::*, response::IntoResponse};
+use axum::{
+    extract,
+    handler::{get, post},
+    response::{IntoResponse, Json},
+    AddExtensionLayer, Router,
+};
 use base64::STANDARD;
 use base64_serde::base64_serde_type;
 use ed25519_dalek::{PublicKey, Signature, Verifier};
 use errors::Errors;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use sqlx::MySqlPool;
-use std::convert::TryFrom;
-use std::net::SocketAddr;
-use std::time::Duration;
-use std::{convert::TryInto, sync::Arc};
+use std::{
+    convert::{TryFrom, TryInto},
+    net::SocketAddr,
+    sync::Arc,
+    time::Duration,
+};
 use tower::ServiceBuilder;
 use tower_http::{compression::CompressionLayer, trace::TraceLayer};
 use tracing::debug;
@@ -63,7 +68,8 @@ async fn main() {
         // convert the `ServiceBuilder` into a `tower::Layer`
         .into_inner();
 
-    let app = route("/version", get(version))
+    let app = Router::new()
+        .route("/version", get(version))
         .route("/account/mapping", post(account_id_mapping))
         .route("/account/verify", post(verify_user))
         .route("/account/register", post(register_account))
@@ -114,7 +120,7 @@ async fn register_account(
     extract::Json(payload): extract::Json<RegisterPayload>,
 ) -> Result<impl IntoResponse, Errors> {
     debug!("Incoming register request");
-    
+
     dbg!(&payload);
 
     let public_key = PublicKey::from_bytes(&payload.public_key).unwrap();
