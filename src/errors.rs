@@ -1,9 +1,10 @@
 use axum::{
-    body::Body,
+    body::{Body, Bytes, Full},
     http::{Response, StatusCode},
     response::IntoResponse,
     response::Json,
 };
+use serde::Serialize;
 use serde_json::json;
 use thiserror::Error;
 
@@ -17,11 +18,20 @@ pub(crate) enum Errors {
     InvalidSignature,
 }
 
+#[derive(Serialize, Debug)]
+struct JsonError {
+    error: String,
+}
+
 impl IntoResponse for Errors {
-    fn into_response(self) -> axum::http::Response<axum::body::Body> {
+    type Body = Full<Bytes>;
+    type BodyError = <Self::Body as axum::body::HttpBody>::Error;
+
+    fn into_response(self) -> Response<Self::Body> {
         match self {
             Errors::DatabaseError(e) => {
                 tracing::error!("database error: {:?}", e);
+
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({
